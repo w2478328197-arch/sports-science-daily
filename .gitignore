@@ -1,0 +1,21 @@
+# Secrets
+.env
+.DS_Store
+
+# Virtual Environments
+venv/
+env/
+__pycache__/
+
+# Logs
+*.log
+
+# Generated Content (keep code, ignore daily reports)
+*_运动科学日报.md
+wearables_last_30_days.md
+Untitled.md
+
+# Local History (keep structure but maybe ignore user specific history?)
+# User specifically wanted "this method" which includes the deduplication LOGIC.
+# The actual history file might be personal, but efficient to start with 0 history for a fresh repo.
+processed_history.json
