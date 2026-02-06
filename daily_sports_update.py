@@ -50,7 +50,6 @@ BLOGGER_FEEDS = [
     ("Mysportscience (Jeukendrup)", "https://www.mysportscience.com/blog-feed.xml"),
     ("Peter Attia (Longevity)", "https://peterattiadrive.libsyn.com/rss"),
     ("Andrew Huberman (Podcast)", "https://feeds.megaphone.fm/hubermanlab"),
-    ("Squat University", "https://www.youtube.com/feeds/videos.xml?channel_id=UCyPYQTT20IgzVw92LDvtClw"),
     ("Science for Sport", "https://www.scienceforsport.com/feed/"), 
     ("YLMSportScience", "https://ylmsportscience.com/feed/"),
     ("Bryan Johnson (Blueprint)", "https://www.youtube.com/feeds/videos.xml?channel_id=UCnRVL1-HJnXWB_Xi2dAoTcg"),
@@ -78,16 +77,35 @@ RSS_FEEDS = {
     "industry": INDUSTRY_FEEDS
 }
 
-# PubMed 顶刊列表
+# PubMed 顶刊列表 (扩展至 22 个全球顶尖期刊)
 PUBMED_JOURNALS = [
-    "Sports Medicine",
+    # 运动医学/临床类
     "British Journal of Sports Medicine",
-    "Journal of Strength and Conditioning Research",
-    "International Journal of Sport Nutrition and Exercise Metabolism",
+    "The American Journal of Sports Medicine",
+    "Sports Medicine",
+    "Scandinavian Journal of Medicine & Science in Sports",
+    "Knee Surgery, Sports Traumatology, Arthroscopy",
+    "Journal of Orthopaedic & Sports Physical Therapy",
+    "Sports Health",
+    "Clinical Journal of Sport Medicine",
+    
+    # 生理学/生物化学类
+    "Journal of Applied Physiology",
     "European Journal of Applied Physiology",
-    "Journal of the International Society of Sports Nutrition", # JISSN
-    "Medicine and Science in Sports and Exercise", # ACSM 官方期刊
-    "Journal of Applied Physiology"
+    "Journal of Strength and Conditioning Research",
+    "Medicine and Science in Sports and Exercise",
+    
+    # 表现/应用科学类
+    "International Journal of Sports Physiology and Performance",
+    "Journal of Sports Sciences",
+    "Journal of Sport and Health Science",
+    "Sports Medicine-Open",
+    
+    # 营养/行为类
+    "International Journal of Sport Nutrition and Exercise Metabolism",
+    "Journal of the International Society of Sports Nutrition",
+    "International Journal of Behavioral Nutrition and Physical Activity",
+    "Nutrients"
 ]
 
 # --- 辅助函数 ---
@@ -624,7 +642,7 @@ def sync_to_notion(blocks, token, page_id):
 
 def main():
     parser = argparse.ArgumentParser(description="Sports Science Daily Crawler")
-    parser.add_argument("--days", type=int, default=2, help="Lookback days for new content")
+    parser.add_argument("--days", type=int, default=7, help="Lookback days for new content (default: 7)")
     parser.add_argument("--no-history", action="store_true", help="Disable history checking (fetching all items)")
     args = parser.parse_args()
     
