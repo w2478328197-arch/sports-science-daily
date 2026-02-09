@@ -59,7 +59,7 @@ BLOGGER_FEEDS = [
     ("JB Morin (Biomechanics)", "https://jb-morin.net/feed/"),
 ]
 
-# 板块 2: 智能可穿戴动向 (Fitbit/Whoop/Garmin/Apple/Huawei/Xiaomi/Oura)
+# 板块 2: 智能可穿戴动向 (Fitbit/Whoop/Garmin/Apple/Oura)
 INDUSTRY_FEEDS = [
     ("DC Rainmaker (Wearable Tech)", "https://www.dcrainmaker.com/feed"),
     ("Google Research (Health & Bioscience)", "https://research.google/blog/rss/"),
@@ -70,10 +70,6 @@ INDUSTRY_FEEDS = [
     ("Polar Blog", "https://www.polar.com/blog/feed/"),
     ("Oura Ring Blog", "https://ouraring.com/blog/feed/"),
     ("Apple Newsroom (Health)", "https://www.apple.com/newsroom/rss-feed.rss"),
-    ("Huawei Central", "https://www.huaweicentral.com/feed/"),
-    ("Xiaomi Time", "https://xiaomitime.com/feed/"),
-    ("Whoop (YouTube)", "https://www.youtube.com/feeds/videos.xml?channel_id=UCcdxzpFrj3uRPh96GrUIoOQ"),
-    ("COROS (YouTube)", "https://www.youtube.com/feeds/videos.xml?channel_id=UC55-9MGcJNCsjqJkd92QaOQ"),
 ]
 
 RSS_FEEDS = {
@@ -280,6 +276,17 @@ def fetch_pubmed_abstracts(days, history_set, disable_history=False):
     
     base_url = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils"
     
+    # --- PubMed Blocklist (Exclude Surgery/Animals) ---
+    PUBMED_BLOCKLIST = [
+        "rat", "rats", "mouse", "mice", "murine", "animal", "porcine", "cadaver", "cadaveric", "vitro",
+        "surgery", "surgical", "reconstruction", "arthroscopy", "arthroplasty", "graft", "implant", "prosthesis",
+        "cancer", "chemotherapy", "tumor", "metastasis", "oncology"
+    ]
+    pubmed_block_pattern = re.compile(
+        r'\b(' + '|'.join(map(re.escape, PUBMED_BLOCKLIST)) + r')\b',
+        re.IGNORECASE
+    )
+    
     # 1. Search
     journal_query = " OR ".join([f'"{j}"[Journal]' for j in PUBMED_JOURNALS])
     # Add date filter
@@ -349,6 +356,15 @@ def fetch_pubmed_abstracts(days, history_set, disable_history=False):
                     else:
                         full_abstract = "No abstract available."
                     
+                    
+                    # --- Blocklist Check ---
+                    text_to_check = (title + " " + full_abstract).lower()
+                    if pubmed_block_pattern.search(text_to_check):
+                        print(f"    🚫 Blocked (Topic): {title[:50]}...")
+                        # Add to history to prevent re-fetching
+                        new_links.add(link) 
+                        continue
+                        
                     # Translation
                     print(f"    📄 Translating: {title[:30]}...")
                     title_zh = translate_to_chinese(title)
@@ -423,14 +439,16 @@ def generate_markdown(rss_data, pubmed_data):
     industry_items = rss_data.get("industry", [])
     
     # 关键词过滤 (仅保留运动健康相关)
+    # 关键词过滤 (仅保留运动健康相关)
     POSITIVE_KEYWORDS = [
         "health", "fitness", "sport", "run", "running", "swim", "cycle", "cycling", "ride", 
         "train", "training", "exercise", "workout", "sleep", "recovery", "rest",
         "heart", "hrv", "pulse", "oxygen", "blood", "glucose", "monitor", "vital", "stress",
-        "watch", "smartwatch", "band", "ring", "wearable", "tracker", "sensor", "algorithm",
-        "gps", "map", "navigation", "coach", "athlete", "marathon", "triathlon",
+        "watch", "smartwatch", "band", "ring", "wearable", "tracker", 
+        "coach", "athlete", "marathon", "triathlon",
         "muscle", "cardio", "aerobic", "anaerobic", "vo2", "calorie", "step", "activity",
-        "motion", "movement", "wellness", "physio", "biometric", "body"
+        "motion", "movement", "wellness", "physio", "biometric", "body",
+        "metabolic", "metabolism", "altitude", "acclimation", "heat", "cold"
     ]
     
     # 必须包含的科研/硬核关键词 (User Request: Focus on Research & Technical Blogs)
@@ -439,16 +457,42 @@ def generate_markdown(rss_data, pubmed_data):
         "algorithm", "validation", "whitepaper", "engineering", "technology", "tech", "lab", 
         "measure", "accuracy", "biomarker", "sensor", "data", "analysis", "insight", "review",
         "deep dive", "explained", "how it works", "behind the scenes", "validity", "reliability",
-        "testing", "beta", "update", "feature", "metric", "physiology"
+        "testing", "beta", "update", "feature", "metric", "physiology",
+        "ai", "artificial intelligence", "machine learning", "neural network", "deep learning", "model",
+        # 可穿戴设备研究专用词
+        "strain", "readiness", "load", "trend", "score", "stage", "zone", "baseline",
+        "track", "detect", "predict", "alert", "notification", "insight", "optimize",
+        "sleep architecture", "circadian", "rem", "deep sleep", "light sleep",
+        "resting heart rate", "respiratory rate", "spo2", "temperature", "skin temp"
+    ]
+    
+    # 受信任的厂商官方博客 (对这些源放宽过滤要求)
+    TRUSTED_SOURCES = [
+        "garmin", "oura", "polar", "fitbit", "whoop", "dc rainmaker",
+        "google research", "apple"
     ]
     
     NEGATIVE_KEYWORDS = [
-        "shareholder", "dividend", "poll", "financial results", "quarterly", "revenue", "profit",
-        "phone", "smartphone", "camera", "lens", "laptop", "notebook", "tv", "television",
-        "car", "automotive", "music", "headphone", "earbud", "movie", "cinema", "game", "gaming",
-        "investment", "stock", "deal", "discount", "sale", "offer", "bundle" 
+        "shareholder", "dividend", "financial results", "quarterly", "revenue", "profit",
+        "phone", "phones", "smartphone", "smartphones", "mobile", "mobiles", 
+        "camera", "cameras", "lens", "lenses", "laptop", "laptops", "notebook", "notebooks", 
+        "tv", "tvs", "television", "televisions",
+        "car", "cars", "automotive", "auto", "vehicle", "vehicles",
+        "headphone", "headphones", "earbud", "earbuds", 
+        "movie", "movies", "cinema", "film", "films", "motion picture",
+        "video game", "gaming", "console", "consoles", 
+        "music", "album", "song", "songs", "artist", "artists", "award", "awards",
+        "investment", "stock", "stocks", "discount", "bundle", "clearance", "sale", "sales",
+        "aviation", "cockpit", "flight", "pilot",  # Garmin Aviation
+        "marathon training", "training plan", "join our", "program" # Generic Training Plans
     ]
-
+    
+    # Pre-compile regex for negative keywords (Word Boundary check)
+    negative_pattern = re.compile(
+        r'\b(' + '|'.join(map(re.escape, NEGATIVE_KEYWORDS)) + r')\b',
+        re.IGNORECASE
+    )
+    
     filtered_industry_items = []
     
     for item in industry_items:
@@ -457,6 +501,10 @@ def generate_markdown(rss_data, pubmed_data):
         if not text_to_check.strip():
              text_to_check = (item['title'] + " " + item['summary']).lower() # Fallback
         
+        # 获取源名称用于白名单检查
+        source_name = item.get('source', '').lower()
+        is_trusted_source = any(ts in source_name for ts in TRUSTED_SOURCES)
+        
         # 1. 必须包含至少一个普通关键词 (Topic)
         has_positive = any(pk in text_to_check for pk in POSITIVE_KEYWORDS)
         
@@ -464,22 +512,27 @@ def generate_markdown(rss_data, pubmed_data):
         has_research = any(rk in text_to_check for rk in RESEARCH_KEYWORDS)
 
         # 3. 不能包含任何负面关键词
-        has_negative = any(nk in text_to_check for nk in NEGATIVE_KEYWORDS)
+        has_negative = bool(negative_pattern.search(text_to_check))
         
-        # 豁免逻辑：如果是 DC Rainmaker/Human Performance 相关的强词，可以稍微宽容
-        STRONG_KEYWORDS = ["validation", "accuracy", "algorithm", "whitepaper", "science", "study"]
+        # 豁免逻辑：对受信任源放宽深度要求
+        STRONG_KEYWORDS = ["validation", "accuracy", "algorithm", "whitepaper"]
         has_strong = any(sk in text_to_check for sk in STRONG_KEYWORDS)
         
         if has_negative and not has_strong:
             is_relevant = False
         else:
-            # 核心逻辑: (Topic OR Strong) AND (Research/Depth OR Strong) ==> 简化为:
-            # 基础要求: 必须是健康/运动相关
-            # 进阶要求: 必须有深度 (Research Keywords)
-            is_relevant = has_positive and (has_research or has_strong)
+            # 核心逻辑升级:
+            # - 受信任源: 只要有 Topic 关键词即可 (放宽 Depth 要求)
+            # - 其他源: 必须同时有 Topic + Depth
+            if is_trusted_source:
+                is_relevant = has_positive  # 受信任源放宽: 只需 Topic
+            else:
+                is_relevant = has_positive and (has_research or has_strong)
             
         if is_relevant:
             filtered_industry_items.append(item)
+        else:
+            print(f"    ❌ Rejected: {item.get('orig_title', item['title'])[:30]}... (Pos:{has_positive}, Res:{has_research}, Str:{has_strong}, Trusted:{is_trusted_source})")
     
     if filtered_industry_items:
         for item in filtered_industry_items:
