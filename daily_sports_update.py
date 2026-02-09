@@ -33,7 +33,7 @@ NOTION_PAGE_ID = os.environ.get("NOTION_PAGE_ID", env_vars.get("NOTION_PAGE_ID",
 # 脚本配置
 ITEMS_PER_FEED = 20         # 增加到 20 以防止像 Huawei Central 这样高频更新的源丢失数据
 TRANSLATION_LIMIT = 2000   # 摘要翻译字数限制 (增加以容纳完整摘要)
-RETMAX_PUBMED = 15         # PubMed 每次检索数量
+RETMAX_PUBMED = 50         # PubMed 每次检索数量 (Increased from 15 to 50 for broader coverage)
 
 # 配置 SSL (解决某些环境下的证书问题)
 if hasattr(ssl, '_create_unverified_context'):
@@ -61,6 +61,7 @@ BLOGGER_FEEDS = [
 
 # 板块 2: 智能可穿戴动向 (Fitbit/Whoop/Garmin/Apple/Huawei/Xiaomi/Oura)
 INDUSTRY_FEEDS = [
+    ("DC Rainmaker (Wearable Tech)", "https://www.dcrainmaker.com/feed"),
     ("Fitbit (Google Blog)", "https://blog.google/products/fitbit/rss/"),
     ("Garmin Blog", "https://www.garmin.com/en-US/blog/feed/"),
     ("Polar Blog", "https://www.polar.com/blog/feed/"),
@@ -207,47 +208,63 @@ def fetch_rss_feeds(days, history_set, disable_history=False):
                 for entry in feed.entries:
                     if count >= ITEMS_PER_FEED: break
                     
-                    # Date Check
-                    date_struct = getattr(entry, 'published_parsed', None) or getattr(entry, 'updated_parsed', None)
-                    if not is_recent(date_struct, days): continue
-                    
-                    link = entry.link
-                    
-                    # Deduplication Check
-                    if not disable_history and link in history_set:
-                        # print(f"    ℹ️ Skipping (Already processed): {entry.title[:30]}...")
+                    try:
+                        # Date Check
+                        date_struct = getattr(entry, 'published_parsed', None) or getattr(entry, 'updated_parsed', None)
+                        if not is_recent(date_struct, days): continue
+                        
+                        # Safe Link Parsing (Fix for Huberman/others)
+                        link = getattr(entry, 'link', '')
+                        if not link and hasattr(entry, 'links'):
+                            for l in entry.links:
+                                if l.get('rel') == 'alternate':
+                                    link = l.get('href')
+                                    break
+                        
+                        if not link:
+                            # print(f"    ⚠️ Skipping entry with no link: {getattr(entry, 'title', 'No Title')[:30]}")
+                            continue
+                        
+                        # Deduplication Check
+                        if not disable_history and link in history_set:
+                            # print(f"    ℹ️ Skipping (Already processed): {entry.title[:30]}...")
+                            continue
+                        
+                        title = getattr(entry, 'title', 'No Title')
+                        
+                        summary = ""
+                        if hasattr(entry, 'summary'): summary = entry.summary
+                        elif hasattr(entry, 'description'): summary = entry.description
+                        elif hasattr(entry, 'media_description'): summary = entry.media_description
+                        
+                        # 优先处理 YouTube 视频描述
+                        if hasattr(entry, 'media_group'):
+                            media_desc = entry.media_group.get('media_description', '')
+                            if media_desc:
+                                summary = media_desc
+                        
+                        # Clean HTML for translation
+                        clean_summary = re.sub(r'<[^>]+>', ' ', summary)
+                        clean_summary = " ".join(clean_summary.split())[:500] 
+                        
+                        print(f"    Processing: {title[:30]}...")
+                        title_zh = translate_to_chinese(title)
+                        summary_zh = translate_to_chinese(clean_summary)
+                        
+                        items.append({
+                            'title': title_zh,
+                            'orig_title': title,
+                            'link': link,
+                            'summary': summary_zh,
+                            'orig_summary': summary, # Store original for filtering
+                            'source': name
+                        })
+                        new_links.add(link)
+                        count += 1
+                        
+                    except Exception as e:
+                        print(f"    ⚠️ Error processing entry from {name}: {e}")
                         continue
-                    
-                    title = entry.title
-                    
-                    summary = ""
-                    if hasattr(entry, 'summary'): summary = entry.summary
-                    elif hasattr(entry, 'description'): summary = entry.description
-                    elif hasattr(entry, 'media_description'): summary = entry.media_description
-                    
-                    # 优先处理 YouTube 视频描述
-                    if hasattr(entry, 'media_group'):
-                        media_desc = entry.media_group.get('media_description', '')
-                        if media_desc:
-                            summary = media_desc
-                    
-                    # Clean HTML for translation
-                    clean_summary = re.sub(r'<[^>]+>', ' ', summary)
-                    clean_summary = " ".join(clean_summary.split())[:500] 
-                    
-                    print(f"    Processing: {title[:30]}...")
-                    title_zh = translate_to_chinese(title)
-                    summary_zh = translate_to_chinese(clean_summary)
-                    
-                    items.append({
-                        'title': title_zh,
-                        'orig_title': title,
-                        'link': link,
-                        'summary': summary_zh,
-                        'source': name
-                    })
-                    new_links.add(link)
-                    count += 1
             except Exception as e:
                 print(f"    ⚠️ Error fetching {name}: {e}")
         
@@ -423,7 +440,10 @@ def generate_markdown(rss_data, pubmed_data):
     filtered_industry_items = []
     
     for item in industry_items:
-        text_to_check = (item['title'] + " " + item['summary']).lower()
+        # CRITICAL FIX: Use original English text for filtering
+        text_to_check = (item.get('orig_title', '') + " " + item.get('orig_summary', '')).lower()
+        if not text_to_check.strip():
+             text_to_check = (item['title'] + " " + item['summary']).lower() # Fallback
         
         # 1. 必须包含至少一个正面关键词
         has_positive = any(pk in text_to_check for pk in POSITIVE_KEYWORDS)
