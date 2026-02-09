@@ -62,6 +62,9 @@ BLOGGER_FEEDS = [
 # 板块 2: 智能可穿戴动向 (Fitbit/Whoop/Garmin/Apple/Huawei/Xiaomi/Oura)
 INDUSTRY_FEEDS = [
     ("DC Rainmaker (Wearable Tech)", "https://www.dcrainmaker.com/feed"),
+    ("Google Research (Health & Bioscience)", "https://research.google/blog/rss/"),
+    ("Whoop Podcast (Recovery Science)", "https://feeds.buzzsprout.com/230442.rss"),
+    ("Oura Engineering (Tech Blog)", "https://ouraring.wpengine.com/category/meet-oura/feed/"), # Ensuring we get technical posts
     ("Fitbit (Google Blog)", "https://blog.google/products/fitbit/rss/"),
     ("Garmin Blog", "https://www.garmin.com/en-US/blog/feed/"),
     ("Polar Blog", "https://www.polar.com/blog/feed/"),
@@ -414,7 +417,7 @@ def generate_markdown(rss_data, pubmed_data):
         md_lines.append("")
 
     # 2. 行业动向
-    md_lines.append("## 2. 智能可穿戴动向 (Fitbit/Whoop/Garmin/Apple/Huawei/Xiaomi/Oura)")
+    md_lines.append("## 2. 行业科研与技术工程 (Industry Research & Engineering)")
     md_lines.append("")
     
     industry_items = rss_data.get("industry", [])
@@ -430,11 +433,20 @@ def generate_markdown(rss_data, pubmed_data):
         "motion", "movement", "wellness", "physio", "biometric", "body"
     ]
     
+    # 必须包含的科研/硬核关键词 (User Request: Focus on Research & Technical Blogs)
+    RESEARCH_KEYWORDS = [
+        "research", "study", "science", "scientist", "clinical", "publication", "paper", "journal",
+        "algorithm", "validation", "whitepaper", "engineering", "technology", "tech", "lab", 
+        "measure", "accuracy", "biomarker", "sensor", "data", "analysis", "insight", "review",
+        "deep dive", "explained", "how it works", "behind the scenes", "validity", "reliability",
+        "testing", "beta", "update", "feature", "metric", "physiology"
+    ]
+    
     NEGATIVE_KEYWORDS = [
         "shareholder", "dividend", "poll", "financial results", "quarterly", "revenue", "profit",
         "phone", "smartphone", "camera", "lens", "laptop", "notebook", "tv", "television",
         "car", "automotive", "music", "headphone", "earbud", "movie", "cinema", "game", "gaming",
-        "investment", "stock"
+        "investment", "stock", "deal", "discount", "sale", "offer", "bundle" 
     ]
 
     filtered_industry_items = []
@@ -445,19 +457,26 @@ def generate_markdown(rss_data, pubmed_data):
         if not text_to_check.strip():
              text_to_check = (item['title'] + " " + item['summary']).lower() # Fallback
         
-        # 1. 必须包含至少一个正面关键词
+        # 1. 必须包含至少一个普通关键词 (Topic)
         has_positive = any(pk in text_to_check for pk in POSITIVE_KEYWORDS)
         
-        # 2. 不能包含任何负面关键词 (除非同时也包含非常核心的词)
+        # 2. 必须包含至少一个科研/硬核关键词 (Depth)
+        has_research = any(rk in text_to_check for rk in RESEARCH_KEYWORDS)
+
+        # 3. 不能包含任何负面关键词
         has_negative = any(nk in text_to_check for nk in NEGATIVE_KEYWORDS)
         
-        STRONG_KEYWORDS = ["watch", "band", "ring", "health", "fitness", "sport", "run", "cycle", "swim", "train", "sleep", "hrv"]
+        # 豁免逻辑：如果是 DC Rainmaker/Human Performance 相关的强词，可以稍微宽容
+        STRONG_KEYWORDS = ["validation", "accuracy", "algorithm", "whitepaper", "science", "study"]
         has_strong = any(sk in text_to_check for sk in STRONG_KEYWORDS)
         
         if has_negative and not has_strong:
             is_relevant = False
         else:
-            is_relevant = has_positive
+            # 核心逻辑: (Topic OR Strong) AND (Research/Depth OR Strong) ==> 简化为:
+            # 基础要求: 必须是健康/运动相关
+            # 进阶要求: 必须有深度 (Research Keywords)
+            is_relevant = has_positive and (has_research or has_strong)
             
         if is_relevant:
             filtered_industry_items.append(item)
